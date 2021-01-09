@@ -28,31 +28,38 @@ class WebpageScraper(ABC):
         super().__init__()
         self.URL = URL
         self.items = self.getItemsFromURL(URL)
-        self.row_format = "{:<75} {:<15} {:<15}"
+        self.rowFormat = "{:<75} {:<15} {:<15}"
         return
 
     @abstractmethod
+    def getItemsSoup(self) -> BeautifulSoup:
+        return
+
+    @abstractmethod
+    def parseForStock(self, itemSoup: BeautifulSoup) -> bool:
+        pass
+
+    @abstractmethod
+    def parseForName(self, itemSoup: BeautifulSoup) -> str:
+        pass
+
+    @abstractmethod
+    def parseForPrice(self, itemSoup: BeautifulSoup) -> str:
+        pass
+
+    @abstractmethod
+    def parseForShipping(self, itemSoup: BeautifulSoup) -> str:
+        pass
+
     def getItemsFromURL(self, URL) -> List[Item]:
-        pass
+        itemsSoup = self.getItemsSoup()
+        itemsSoup = list(filter(self.parseForStock, itemsSoup))
+        items = list(map(self.buildItem, itemsSoup))
+        items.sort(key=lambda x: x.price, reverse=True)
+        return items
 
-    @abstractmethod
-    def parseForStock(self, item: BeautifulSoup) -> bool:
-        pass
-
-    @abstractmethod
-    def parseForName(self, item: BeautifulSoup) -> str:
-        pass
-
-    @abstractmethod
-    def parseForPrice(self, item: BeautifulSoup) -> str:
-        pass
-
-    @abstractmethod
-    def parseForShipping(self, item: BeautifulSoup) -> str:
-        pass
-
-    def buildItem(self, item: BeautifulSoup) -> Item:
-        return Item(self.parseForName(item), float(self.parseForPrice(item).replace(",", "")), self.parseForShipping(item))
+    def buildItem(self, itemSoup: BeautifulSoup) -> Item:
+        return Item(self.parseForName(itemSoup), float(self.parseForPrice(itemSoup).replace(",", "")), self.parseForShipping(itemSoup))
 
     def printItemTable(self) -> None:
         print("*" * 180)
@@ -62,7 +69,7 @@ class WebpageScraper(ABC):
             print("No items in stock")
         else:
             for item in self.items:
-                print(self.row_format.format(
+                print(self.rowFormat.format(
                     item.name, str(item.price), item.shipping))
 
         print("*" * 180)
@@ -72,22 +79,17 @@ class NeweggScraper(WebpageScraper):
     def __init__(self, URL):
         super().__init__(URL)
 
-    def getItemsFromURL(self, URL) -> List[Item]:
+    def getItemsSoup(self) -> BeautifulSoup:
         page = requests.get(self.URL)
         soup = BeautifulSoup(page.content, 'html.parser')
-        itemsSoup = soup.find_all("div", class_="item-cell")
-        itemsSoup = list(filter(self.parseForStock, itemsSoup))
+        return soup.find_all("div", class_="item-cell")
 
-        items = list(map(self.buildItem, itemsSoup))
-        items.sort(key=lambda x: x.price, reverse=True)
-        return items
-
-    def parseForStock(self, item: BeautifulSoup) -> bool:
-        itemPromo = item.find("p", class_="item-promo")
+    def parseForStock(self, itemSoup: BeautifulSoup) -> bool:
+        itemPromo = itemSoup.find("p", class_="item-promo")
         return False if itemPromo and itemPromo.text == "OUT OF STOCK" else True
 
-    def parseForName(self, item: BeautifulSoup) -> str:
-        itemTitleElement = item.find("a", class_="item-title")
+    def parseForName(self, itemSoup: BeautifulSoup) -> str:
+        itemTitleElement = itemSoup.find("a", class_="item-title")
         if not itemTitleElement:
             return ""
 
@@ -102,8 +104,8 @@ class NeweggScraper(WebpageScraper):
 
         return itemTitleElement.text
 
-    def parseForPrice(self, item: BeautifulSoup) -> str:
-        currentPriceElement = item.find("li", class_="price-current")
+    def parseForPrice(self, itemSoup: BeautifulSoup) -> str:
+        currentPriceElement = itemSoup.find("li", class_="price-current")
         basePriceElement = currentPriceElement.find('strong')
         if basePriceElement and basePriceElement.text != "COMING SOON":
             decimalPriceElement = currentPriceElement.find('sup')
@@ -111,11 +113,12 @@ class NeweggScraper(WebpageScraper):
         else:
             return ""
 
-    def parseForShipping(self, item: BeautifulSoup) -> str:
-        shippingPriceElement = item.find("li", class_="price-ship")
+    def parseForShipping(self, itemSoup: BeautifulSoup) -> str:
+        shippingPriceElement = itemSoup.find("li", class_="price-ship")
         return "" if not shippingPriceElement else shippingPriceElement.text
 
-        # Newegg
+
+# Newegg
 # URL = "https://www.newegg.com/p/pl?LeftPriceRange=200+500&N=100007709%204841%208000%20601357282%20601321572%20601331379&PageSize=96"
 URL = "https://www.newegg.com/p/pl?N=100007709%204841%208000&PageSize=96"
 
