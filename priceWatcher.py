@@ -71,8 +71,9 @@ class WebpageScraper(ABC):
         return Item(self.parseForName(itemSoup), float(self.parseForPrice(itemSoup).replace(",", "")), self.parseForShipping(itemSoup))
 
     def printItemTable(self) -> None:
-        print("*" * 180)
-        print("--- Newegg URL: {} ---\n".format(self.URL))
+        print("*" * 120)
+
+        print("\nNewegg URL: {}\n".format(self.URL))
 
         if len(self.items) == 0:
             print("No items in stock")
@@ -80,8 +81,6 @@ class WebpageScraper(ABC):
             for item in self.items:
                 print(self.rowFormat.format(
                     item.name, str(item.price), item.shipping))
-
-        print("*" * 180)
 
 
 class NeweggScraper(WebpageScraper):
