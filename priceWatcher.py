@@ -2,6 +2,8 @@ import requests
 from typing import List
 from bs4 import BeautifulSoup
 from abc import ABC, abstractmethod
+import time
+
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0",
@@ -24,16 +26,17 @@ class Item:
 
 
 class WebpageScraper(ABC):
-    def __init__(self, URL: str):
+    def __init__(self, URL: str, description: str):
         super().__init__()
         self.URL = URL
         self.items = self.getItemsFromURL(URL)
-        self.rowFormat = "{:<75} {:<15} {:<15}"
+        self.rowFormat = "{:<100} {:<15} {:<15}"
+        self.description = description
         return
 
     @abstractmethod
-    def getItemsSoup(self) -> BeautifulSoup:
-        return
+    def getItemsSoup(self) -> List[BeautifulSoup]:
+        pass
 
     @abstractmethod
     def parseForStock(self, itemSoup: BeautifulSoup) -> bool:
@@ -58,7 +61,8 @@ class WebpageScraper(ABC):
         items.sort(key=lambda x: x.price, reverse=True)
         return items
 
-    def getShortenedGraphicsCardName(self, name) -> str:
+    @staticmethod
+    def getShortenedGraphicsCardName(name: str) -> str:
         nameArr = name.split()
         lowerCaseNameArr = [x.lower() for x in nameArr]
         for brand in CARD_BRANDS:
@@ -73,7 +77,8 @@ class WebpageScraper(ABC):
     def printItemTable(self) -> None:
         print("*" * 120)
 
-        print("\nNewegg URL: {}\n".format(self.URL))
+        print("{:14}{}\n{:<14}{}\n".format(
+            "Description: ", self.description, "URL: ", self.URL))
 
         if len(self.items) == 0:
             print("No items in stock")
@@ -84,10 +89,10 @@ class WebpageScraper(ABC):
 
 
 class NeweggScraper(WebpageScraper):
-    def __init__(self, URL):
-        super().__init__(URL)
+    def __init__(self, URL: str, description: str):
+        super().__init__(URL, description)
 
-    def getItemsSoup(self) -> BeautifulSoup:
+    def getItemsSoup(self) -> List[BeautifulSoup]:
         page = requests.get(self.URL)
         soup = BeautifulSoup(page.content, 'html.parser')
         return soup.find_all("div", class_="item-cell")
@@ -102,7 +107,7 @@ class NeweggScraper(WebpageScraper):
         if not itemTitleElement:
             return ""
 
-        shortenedName = self.getShortenedGraphicsCardName(
+        shortenedName = WebpageScraper.getShortenedGraphicsCardName(
             itemTitleElement.text)
 
         return shortenedName if shortenedName != "" else itemTitleElement.text
@@ -121,17 +126,60 @@ class NeweggScraper(WebpageScraper):
         return "" if not shippingPriceElement else shippingPriceElement.text
 
 
-# Newegg
-# URL = "https://www.newegg.com/p/pl?LeftPriceRange=200+500&N=100007709%204841%208000%20601357282%20601321572%20601331379&PageSize=96"
-URL = "https://www.newegg.com/p/pl?N=100007709%204841%208000&PageSize=96"
+class EbaystoreScraper(WebpageScraper):
+    def __init__(self, URL: str, description: str):
+        super().__init__(URL, description)
+
+    def getItemsSoup(self) -> List[BeautifulSoup]:
+        page = requests.get(self.URL)
+        soup = BeautifulSoup(page.content, "html.parser")
+        return soup.find_all("li", class_="s-item")
+
+    def parseForStock(self, itemSoup: BeautifulSoup) -> bool:
+        # Item would not be posted if not in stock
+        return True
+
+    def parseForName(self, itemSoup: BeautifulSoup) -> str:
+        itemNameElement = itemSoup.find("h3", class_="s-item__title")
+        if not itemNameElement:
+            return ""
+
+        shortenedName = WebpageScraper.getShortenedGraphicsCardName(
+            itemNameElement.text)
+
+        return shortenedName if shortenedName != "" else itemNameElement.text
+
+    def parseForPrice(self, itemSoup: BeautifulSoup) -> str:
+        itemPriceElement = itemSoup.find("span", class_="s-item__price")
+        return "" if not itemPriceElement else itemPriceElement.text[1:]
+
+    def parseForShipping(self, itemSoup: BeautifulSoup) -> str:
+        itemShippingElement = itemSoup.find("span", class_="s-item__shipping")
+        return "" if not itemShippingElement else itemShippingElement.text
 
 
-# Ebay Newegg
-# URL = "https://www.ebay.com/str/Newegg/VGA/_i.html?_storecat=12816376018&_sop=16&rt=nc"
+SCRAPERS = [
+    {
+        "cls": EbaystoreScraper,
+        "description": "Ebay Newegg store for graphics cards greater than $200",
+        "url": "https://www.ebay.com/str/Newegg/VGA/_i.html?_storecat=12816376018&_sop=16&LH_BIN=1&rt=nc&_udlo=200",
+    },
+    {
+        "cls": NeweggScraper,
+        "description": "Newegg Listing for graphics cards between $200 and $500",
+        "url": "https://www.newegg.com/p/pl?LeftPriceRange=200+500&N=100007709%204841%208000%20601357282%20601321572%20601331379&PageSize=96"
+    }
+]
 
 
-# Reddit Posts
-# URL = "https://www.reddit.com/r/buildapcsales/new/"
+def main():
+    while True:
+        for scraper in SCRAPERS:
+            cls, description, url = scraper["cls"], scraper["description"], scraper["url"]
+            cls(url, description).printItemTable()
+        print("*" * 40, " UPDATED: ", time.ctime(), " ", "*" * 41)
+        time.sleep(60)
 
-x = NeweggScraper(URL)
-x.printItemTable()
+
+if __name__ == "__main__":
+    main()
