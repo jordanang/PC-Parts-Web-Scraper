@@ -58,6 +58,15 @@ class WebpageScraper(ABC):
         items.sort(key=lambda x: x.price, reverse=True)
         return items
 
+    def getShortenedGraphicsCardName(self, name) -> str:
+        nameArr = name.split()
+        lowerCaseNameArr = [x.lower() for x in nameArr]
+        for brand in CARD_BRANDS:
+            if brand in lowerCaseNameArr:
+                return " ".join(nameArr[:lowerCaseNameArr.index(brand)+4])
+
+        return ""
+
     def buildItem(self, itemSoup: BeautifulSoup) -> Item:
         return Item(self.parseForName(itemSoup), float(self.parseForPrice(itemSoup).replace(",", "")), self.parseForShipping(itemSoup))
 
@@ -90,19 +99,14 @@ class NeweggScraper(WebpageScraper):
 
     def parseForName(self, itemSoup: BeautifulSoup) -> str:
         itemTitleElement = itemSoup.find("a", class_="item-title")
+
         if not itemTitleElement:
             return ""
 
-        try:
-            nameArr = itemTitleElement.text.split()
-            lowerCaseNameArr = [x.lower() for x in nameArr]
-            for brand in CARD_BRANDS:
-                if brand in lowerCaseNameArr:
-                    return " ".join(nameArr[:lowerCaseNameArr.index(brand)+3])
-        except:
-            return itemTitleElement.text
+        shortenedName = self.getShortenedGraphicsCardName(
+            itemTitleElement.text)
 
-        return itemTitleElement.text
+        return shortenedName if shortenedName != "" else itemTitleElement.text
 
     def parseForPrice(self, itemSoup: BeautifulSoup) -> str:
         currentPriceElement = itemSoup.find("li", class_="price-current")
